@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Marginalia</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1f2a24" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="masthead">
+  <h1>Marginalia</h1>
+  <div class="date" id="today"></div>
+</header>
+
+<main>
+
+  <!-- CAPTURE -->
+  <section class="view active" id="view-capture">
+    <form class="capture" id="capture-form">
+      <label for="quote">Quote</label>
+      <textarea id="quote" required placeholder="What caught you?"></textarea>
+
+      <label for="link">Link</label>
+      <input id="link" type="url" placeholder="https://…" />
+
+      <label for="source_type">Source</label>
+      <select id="source_type">
+        <option value="article">Article</option>
+        <option value="book">Book</option>
+        <option value="podcast">Podcast</option>
+        <option value="video">Video</option>
+        <option value="other">Other</option>
+      </select>
+
+      <label>Category</label>
+      <div class="category-picker" id="category-picker">
+        <button type="button" class="category-chip add-new" id="add-category">+ new</button>
+      </div>
+      <input type="hidden" id="category_id" />
+
+      <label for="context">Context — why it mattered</label>
+      <textarea id="context" placeholder="Optional"></textarea>
+
+      <label for="used_at">When</label>
+      <input id="used_at" type="datetime-local" />
+
+      <button type="submit" class="primary">Save note</button>
+      <div class="sync-status" id="sync-status"></div>
+    </form>
+  </section>
+
+  <!-- NOTES -->
+  <section class="view" id="view-notes">
+    <div id="notes-list"></div>
+  </section>
+
+  <!-- DIGEST -->
+  <section class="view" id="view-digest">
+    <div id="digest-content">
+      <p class="digest-empty">No digest yet — the first one lands Saturday at 10am.</p>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button data-view="capture" class="active">Capture</button>
+  <button data-view="notes">Notes</button>
+  <button data-view="digest">This Week</button>
+</nav>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

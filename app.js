@@ -1,0 +1,278 @@
+import { supabase } from "./supabase-client.js";
+import { queueNote, getPendingNotes, markSynced, markFailed } from "./idb-queue.js";
+
+// ------------------------------------------------------------
+// Service worker registration
+// ------------------------------------------------------------
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/marginalia/sw.js", { scope: "/marginalia/" });
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "TRY_SYNC") syncPendingNotes();
+  });
+}
+
+// ------------------------------------------------------------
+// Category management — cached locally, created ad hoc
+// ------------------------------------------------------------
+let categoriesCache = [];
+
+async function loadCategories() {
+  const { data, error } = await supabase.from("categories").select("*").order("name");
+  if (!error && data) categoriesCache = data;
+  return categoriesCache;
+}
+
+async function createCategory(name) {
+  const { data, error } = await supabase
+    .from("categories")
+    .insert({ name })
+    .select()
+    .single();
+  if (error) throw error;
+  categoriesCache.push(data);
+  return data;
+}
+
+function renderCategoryPicker(pickerEl, hiddenInputEl) {
+  // Clear existing chips except the "+ new" button
+  [...pickerEl.querySelectorAll(".category-chip:not(.add-new)")].forEach((el) => el.remove());
+  const addBtn = pickerEl.querySelector(".add-new");
+
+  categoriesCache.forEach((cat) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "category-chip";
+    chip.textContent = cat.name;
+    chip.dataset.id = cat.id;
+    chip.style.borderColor = cat.color || "#c9c2b2";
+    chip.addEventListener("click", () => {
+      pickerEl.querySelectorAll(".category-chip").forEach((c) => c.classList.remove("selected"));
+      chip.classList.add("selected");
+      hiddenInputEl.value = cat.id;
+    });
+    pickerEl.insertBefore(chip, addBtn);
+  });
+}
+
+function wireAddCategory(pickerEl, hiddenInputEl) {
+  const addBtn = pickerEl.querySelector(".add-new");
+  addBtn.addEventListener("click", async () => {
+    const name = prompt("New category name");
+    if (!name) return;
+    try {
+      const cat = await createCategory(name.trim());
+      renderCategoryPicker(pickerEl, hiddenInputEl);
+      const chip = [...pickerEl.querySelectorAll(".category-chip")].find(
+        (c) => c.dataset.id === cat.id
+      );
+      chip?.click();
+    } catch (err) {
+      alert("Couldn't create category — check your connection.");
+    }
+  });
+}
+
+// ------------------------------------------------------------
+// Capture form — used by both index.html and capture.html
+// ------------------------------------------------------------
+export async function initCaptureForm({ formEl, prefill = {}, onSaved } = {}) {
+  await loadCategories();
+
+  const pickerEl = formEl.querySelector("#category-picker");
+  const hiddenInputEl = formEl.querySelector("#category_id");
+  renderCategoryPicker(pickerEl, hiddenInputEl);
+  wireAddCategory(pickerEl, hiddenInputEl);
+
+  if (prefill.quote) formEl.querySelector("#quote").value = prefill.quote;
+  if (prefill.link) formEl.querySelector("#link").value = prefill.link;
+
+  const usedAtEl = formEl.querySelector("#used_at");
+  if (usedAtEl && !usedAtEl.value) {
+    usedAtEl.value = new Date().toISOString().slice(0, 16);
+  }
+
+  formEl.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const statusEl = formEl.querySelector("#sync-status");
+
+    const note = {
+      quote: formEl.querySelector("#quote").value.trim(),
+      link: formEl.querySelector("#link").value.trim() || null,
+      source_type: formEl.querySelector("#source_type").value,
+      category_id: hiddenInputEl.value || null,
+      context: formEl.querySelector("#context").value.trim() || null,
+      source_used_at: usedAtEl ? new Date(usedAtEl.value).toISOString() : new Date().toISOString(),
+      client_id: crypto.randomUUID(),
+    };
+
+    if (!note.quote) return;
+
+    // Always queue locally first — this is the source of truth until synced
+    await queueNote(note);
+    formEl.reset();
+    renderCategoryPicker(pickerEl, hiddenInputEl);
+
+    if (statusEl) {
+      statusEl.textContent = "Queued — syncing…";
+      statusEl.className = "sync-status pending";
+    }
+
+    onSaved?.(note);
+    syncPendingNotes();
+  });
+}
+
+// ------------------------------------------------------------
+// Offline queue sync — fires on load, on 'online', and periodically
+// (iOS Safari has no Background Sync API, so this covers the gap)
+// ------------------------------------------------------------
+export async function syncPendingNotes() {
+  const pending = await getPendingNotes();
+  if (pending.length === 0) return;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return; // not signed in yet — nothing to sync against
+
+  for (const note of pending) {
+    const { client_id, status, queued_at, ...payload } = note;
+    const { error } = await supabase.from("notes").insert({
+      ...payload,
+      client_id,
+      user_id: user.id,
+    });
+    if (error) {
+      // Unique violation on client_id means it's already synced — treat as success
+      if (error.code === "23505") await markSynced(client_id);
+      else await markFailed(client_id);
+    } else {
+      await markSynced(client_id);
+    }
+  }
+
+  const statusEl = document.getElementById("sync-status");
+  if (statusEl) {
+    statusEl.textContent = "All notes synced.";
+    statusEl.className = "sync-status synced";
+  }
+
+  refreshNotesList();
+}
+
+window.addEventListener("online", syncPendingNotes);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") syncPendingNotes();
+});
+
+// ------------------------------------------------------------
+// Notes list
+// ------------------------------------------------------------
+async function refreshNotesList() {
+  const listEl = document.getElementById("notes-list");
+  if (!listEl) return;
+
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*, categories(name, color)")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error || !data) return;
+
+  listEl.innerHTML = data
+    .map(
+      (n) => `
+    <div class="note-card">
+      <div class="quote">${escapeHtml(n.quote)}</div>
+      <div class="meta">
+        <span>${n.categories?.name ?? "Uncategorised"}</span>
+        <span>${n.source_type}</span>
+        <span>${new Date(n.source_used_at).toLocaleDateString()}</span>
+        ${n.link ? `<a href="${n.link}" target="_blank">link →</a>` : ""}
+      </div>
+      ${n.context ? `<div class="context">${escapeHtml(n.context)}</div>` : ""}
+    </div>`
+    )
+    .join("");
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ------------------------------------------------------------
+// Digest view
+// ------------------------------------------------------------
+async function refreshDigest() {
+  const el = document.getElementById("digest-content");
+  if (!el) return;
+
+  const { data, error } = await supabase
+    .from("digests")
+    .select("*")
+    .order("week_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    el.innerHTML = `<p class="digest-empty">No digest yet — the first one lands Saturday at 10am.</p>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="digest-card">
+      <h2>Week of ${new Date(data.week_start).toLocaleDateString()}</h2>
+      <div class="range">${data.note_count} notes · ${new Date(data.week_start).toLocaleDateString()} – ${new Date(data.week_end).toLocaleDateString()}</div>
+      <div class="summary">${escapeHtml(data.summary)}</div>
+    </div>`;
+}
+
+// ------------------------------------------------------------
+// Realtime — new notes and digests appear live across devices
+// ------------------------------------------------------------
+supabase
+  .channel("notes-changes")
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, refreshNotesList)
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "digests" }, refreshDigest)
+  .subscribe();
+
+// ------------------------------------------------------------
+// Tab navigation (index.html only — capture.html is single-view)
+// ------------------------------------------------------------
+const tabbar = document.querySelector("nav.tabbar");
+if (tabbar) {
+  tabbar.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabbar.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+      const view = document.getElementById(`view-${btn.dataset.view}`);
+      view.classList.add("active");
+      if (btn.dataset.view === "notes") refreshNotesList();
+      if (btn.dataset.view === "digest") refreshDigest();
+    });
+  });
+}
+
+// ------------------------------------------------------------
+// Boot (index.html)
+// ------------------------------------------------------------
+const dateEl = document.getElementById("today");
+if (dateEl) {
+  dateEl.textContent = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+const mainCaptureForm = document.getElementById("capture-form");
+if (mainCaptureForm && document.getElementById("view-capture")) {
+  initCaptureForm({
+    formEl: mainCaptureForm,
+    onSaved: () => refreshNotesList(),
+  });
+}
+
+syncPendingNotes();

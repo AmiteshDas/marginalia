@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Marginalia — Quick capture</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="masthead">
+  <h1>Marginalia</h1>
+  <div class="date">Quick capture</div>
+</header>
+
+<main>
+  <form class="capture" id="capture-form">
+    <label for="quote">Quote</label>
+    <textarea id="quote" required placeholder="What caught you?"></textarea>
+
+    <label for="link">Link</label>
+    <input id="link" type="url" placeholder="https://…" />
+
+    <label for="source_type">Source</label>
+    <select id="source_type">
+      <option value="article">Article</option>
+      <option value="book">Book</option>
+      <option value="podcast">Podcast</option>
+      <option value="video">Video</option>
+      <option value="other">Other</option>
+    </select>
+
+    <label>Category</label>
+    <div class="category-picker" id="category-picker">
+      <button type="button" class="category-chip add-new" id="add-category">+ new</button>
+    </div>
+    <input type="hidden" id="category_id" />
+
+    <label for="context">Context — why it mattered</label>
+    <textarea id="context" placeholder="Optional"></textarea>
+
+    <button type="submit" class="primary">Save note</button>
+    <div class="sync-status" id="sync-status"></div>
+  </form>
+  <p style="text-align:center; margin-top:16px;">
+    <a href="/marginalia/index.html" style="color: var(--ink-soft); font-size: 13px;">Open Marginalia →</a>
+  </p>
+</main>
+
+<script type="module">
+  import { initCaptureForm } from "./app.js";
+
+  // Pre-fill from share-target query params (Android) or bookmarklet params (iOS fallback)
+  const params = new URLSearchParams(window.location.search);
+  const text = params.get("text") || params.get("title") || "";
+  const url = params.get("url") || "";
+
+  initCaptureForm({
+    formEl: document.getElementById("capture-form"),
+    prefill: { quote: text, link: url },
+    onSaved: () => {
+      document.getElementById("sync-status").textContent = "Saved — queued to sync.";
+      setTimeout(() => window.close(), 900); // closes if opened as a share-sheet popover
+    },
+  });
+</script>
+</body>
+</html>

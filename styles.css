@@ -1,0 +1,181 @@
+/* Marginalia — a quiet, editorial reading log.
+   Palette: paper (#f7f5f0), ink (#1f2a24), rule (#c9c2b2), accent (#9c5a3c — a worn book-cloth red) */
+
+@font-face {
+  font-family: "Source Serif";
+  src: local("Source Serif 4"), local("Georgia");
+}
+
+:root {
+  --paper: #f7f5f0;
+  --ink: #1f2a24;
+  --ink-soft: #566058;
+  --rule: #c9c2b2;
+  --accent: #9c5a3c;
+  --card: #fffdf9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "iA Writer Quattro", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  padding-bottom: 72px; /* room for the tab bar */
+}
+
+h1, h2, h3 {
+  font-family: "Source Serif", Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+header.masthead {
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+header.masthead h1 {
+  font-size: 22px;
+  margin: 0;
+}
+header.masthead .date {
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+main { padding: 16px 20px 40px; max-width: 640px; margin: 0 auto; }
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* Capture form */
+form.capture {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 18px;
+}
+form.capture label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  margin: 14px 0 4px;
+}
+form.capture label:first-of-type { margin-top: 0; }
+form.capture textarea,
+form.capture input,
+form.capture select {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+}
+form.capture textarea { resize: vertical; min-height: 64px; }
+
+.category-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.category-chip {
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  background: var(--paper);
+  cursor: pointer;
+}
+.category-chip.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--card);
+}
+.category-chip.add-new { border-style: dashed; }
+
+button.primary {
+  margin-top: 18px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary:active { opacity: 0.85; }
+
+.sync-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.sync-status.pending::before { content: "○ "; color: var(--accent); }
+.sync-status.synced::before { content: "● "; color: #4a7c59; }
+
+/* Notes list */
+.note-card {
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 0;
+}
+.note-card .quote {
+  font-family: "Source Serif", Georgia, serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.note-card .quote::before { content: "\201C"; }
+.note-card .quote::after { content: "\201D"; }
+.note-card .meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.note-card .context {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Digest */
+.digest-card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.digest-card h2 { font-size: 17px; margin: 0 0 4px; }
+.digest-card .range { font-size: 12px; color: var(--ink-soft); margin-bottom: 12px; }
+.digest-card .summary { white-space: pre-line; font-size: 14.5px; }
+.digest-empty { color: var(--ink-soft); font-size: 14px; padding: 30px 0; text-align: center; }
+
+/* Tab bar */
+nav.tabbar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  background: var(--card);
+  border-top: 1px solid var(--rule);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+nav.tabbar button {
+  flex: 1;
+  padding: 12px 0 10px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+nav.tabbar button.active { color: var(--accent); font-weight: 600; }
