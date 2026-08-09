@@ -15,12 +15,23 @@
 <header class="masthead">
   <h1>Marginalia</h1>
   <div class="date" id="today"></div>
+  <button type="button" class="signout-link" id="signout-btn" hidden>Sign out</button>
 </header>
 
 <main>
 
+  <!-- LOGIN -->
+  <section class="view active" id="view-login">
+    <form class="capture" id="login-form">
+      <label for="login-email">Email</label>
+      <input id="login-email" type="email" required placeholder="you@example.com" />
+      <button type="submit" class="primary">Send magic link</button>
+      <div class="sync-status" id="login-status"></div>
+    </form>
+  </section>
+
   <!-- CAPTURE -->
-  <section class="view active" id="view-capture">
+  <section class="view" id="view-capture">
     <form class="capture" id="capture-form">
       <label for="quote">Quote</label>
       <textarea id="quote" required placeholder="What caught you?"></textarea>
@@ -68,7 +79,7 @@
 
 </main>
 
-<nav class="tabbar">
+<nav class="tabbar" hidden>
   <button data-view="capture" class="active">Capture</button>
   <button data-view="notes">Notes</button>
   <button data-view="digest">This Week</button>

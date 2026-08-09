@@ -47,6 +47,17 @@ header.masthead .date {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+.signout-link {
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 4px;
+}
 
 main { padding: 16px 20px 40px; max-width: 640px; margin: 0 auto; }
 
@@ -169,6 +180,7 @@ nav.tabbar {
   border-top: 1px solid var(--rule);
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+nav.tabbar[hidden] { display: none; }
 nav.tabbar button {
   flex: 1;
   padding: 12px 0 10px;

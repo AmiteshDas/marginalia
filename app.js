@@ -23,9 +23,11 @@ async function loadCategories() {
 }
 
 async function createCategory(name) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("not signed in");
   const { data, error } = await supabase
     .from("categories")
-    .insert({ name })
+    .insert({ name, user_id: user.id })
     .select()
     .single();
   if (error) throw error;
@@ -238,6 +240,72 @@ supabase
   .subscribe();
 
 // ------------------------------------------------------------
+// Auth — magic link (index.html only; capture.html queues offline
+// and syncs later when the user opens index.html signed in)
+// ------------------------------------------------------------
+function setAuthedUI(isAuthed) {
+  const loginView = document.getElementById("view-login");
+  const captureView = document.getElementById("view-capture");
+  const tabbar = document.querySelector("nav.tabbar");
+  const signoutBtn = document.getElementById("signout-btn");
+  if (!loginView) return; // capture.html has no auth gate
+
+  loginView.classList.toggle("active", !isAuthed);
+  if (tabbar) tabbar.hidden = !isAuthed;
+  if (signoutBtn) signoutBtn.hidden = !isAuthed;
+
+  if (isAuthed) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    captureView?.classList.add("active");
+    document.querySelectorAll("nav.tabbar button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.view === "capture")
+    );
+  } else {
+    captureView?.classList.remove("active");
+  }
+}
+
+async function initAuth() {
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = loginForm.querySelector("#login-email").value.trim();
+      const statusEl = document.getElementById("login-status");
+      if (!email) return;
+      statusEl.textContent = "Sending…";
+      statusEl.className = "sync-status";
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.href },
+      });
+      statusEl.textContent = error
+        ? "Couldn't send link — try again."
+        : "Check your email for the magic link.";
+      statusEl.className = error ? "sync-status" : "sync-status synced";
+    });
+  }
+
+  document.getElementById("signout-btn")?.addEventListener("click", () => supabase.auth.signOut());
+
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    setAuthedUI(!!session?.user);
+    if (session?.user) {
+      await loadCategories();
+      const pickerEl = document.getElementById("category-picker");
+      const hiddenInputEl = document.getElementById("category_id");
+      if (pickerEl && hiddenInputEl) renderCategoryPicker(pickerEl, hiddenInputEl);
+      syncPendingNotes();
+      refreshNotesList();
+      refreshDigest();
+    }
+  });
+
+  const { data: { session } } = await supabase.auth.getSession();
+  setAuthedUI(!!session?.user);
+}
+
+// ------------------------------------------------------------
 // Tab navigation (index.html only — capture.html is single-view)
 // ------------------------------------------------------------
 const tabbar = document.querySelector("nav.tabbar");
@@ -275,4 +343,5 @@ if (mainCaptureForm && document.getElementById("view-capture")) {
   });
 }
 
+initAuth();
 syncPendingNotes();
