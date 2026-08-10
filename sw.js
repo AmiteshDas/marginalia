@@ -1,4 +1,8 @@
-const CACHE = "marginalia-shell-v1";
+// Bump this version whenever index.html, app.js, styles.css, or any other
+// SHELL_ASSETS file changes — it's what forces installed PWAs to drop their
+// stale cache and fetch the new files, since the fetch handler below is
+// cache-first for these paths.
+const CACHE = "marginalia-shell-v2";
 const BASE = "/marginalia";
 const SHELL_ASSETS = [
   `${BASE}/index.html`,
