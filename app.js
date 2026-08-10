@@ -240,8 +240,15 @@ supabase
   .subscribe();
 
 // ------------------------------------------------------------
-// Auth — magic link (index.html only; capture.html queues offline
-// and syncs later when the user opens index.html signed in)
+// Auth — emailed one-time code (index.html only; capture.html queues
+// offline and syncs later when the user opens index.html signed in).
+// A typed code is used instead of a clickable magic link because a
+// standalone home-screen PWA on iOS has storage isolated from Safari,
+// so a session started by tapping the link in Mail (which opens in
+// Safari) never reaches the installed app. Some email providers'
+// link-scanners also pre-visit and burn single-use magic links before
+// the user ever clicks them. A code typed directly into the app avoids
+// both problems.
 // ------------------------------------------------------------
 function setAuthedUI(isAuthed) {
   const loginView = document.getElementById("view-login");
@@ -262,11 +269,22 @@ function setAuthedUI(isAuthed) {
     );
   } else {
     captureView?.classList.remove("active");
+    const loginForm = document.getElementById("login-form");
+    const codeForm = document.getElementById("login-code-form");
+    if (loginForm && codeForm) {
+      codeForm.hidden = true;
+      codeForm.reset();
+      loginForm.hidden = false;
+      loginForm.reset();
+    }
   }
 }
 
 async function initAuth() {
   const loginForm = document.getElementById("login-form");
+  const codeForm = document.getElementById("login-code-form");
+  let pendingEmail = "";
+
   if (loginForm) {
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -275,14 +293,45 @@ async function initAuth() {
       if (!email) return;
       statusEl.textContent = "Sending…";
       statusEl.className = "sync-status";
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.href },
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) {
+        statusEl.textContent = "Couldn't send code — try again.";
+        statusEl.className = "sync-status";
+        return;
+      }
+      pendingEmail = email;
+      statusEl.textContent = "";
+      loginForm.hidden = true;
+      codeForm.hidden = false;
+      codeForm.querySelector("#login-code").focus();
+    });
+  }
+
+  if (codeForm) {
+    codeForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const token = codeForm.querySelector("#login-code").value.trim();
+      const statusEl = document.getElementById("login-code-status");
+      if (!token) return;
+      statusEl.textContent = "Verifying…";
+      statusEl.className = "sync-status";
+      const { error } = await supabase.auth.verifyOtp({
+        email: pendingEmail,
+        token,
+        type: "email",
       });
-      statusEl.textContent = error
-        ? "Couldn't send link — try again."
-        : "Check your email for the magic link.";
-      statusEl.className = error ? "sync-status" : "sync-status synced";
+      if (error) {
+        statusEl.textContent = "Wrong or expired code — try again.";
+        statusEl.className = "sync-status";
+      }
+      // On success, onAuthStateChange below swaps the view — nothing more to do here.
+    });
+
+    document.getElementById("login-code-back")?.addEventListener("click", () => {
+      codeForm.hidden = true;
+      codeForm.reset();
+      document.getElementById("login-code-status").textContent = "";
+      loginForm.hidden = false;
     });
   }
 

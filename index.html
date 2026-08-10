@@ -34,8 +34,16 @@
     <form class="capture" id="login-form">
       <label for="login-email">Email</label>
       <input id="login-email" type="email" required placeholder="you@example.com" />
-      <button type="submit" class="primary">Send magic link</button>
+      <button type="submit" class="primary">Send code</button>
       <div class="sync-status" id="login-status"></div>
+    </form>
+    <form class="capture" id="login-code-form" hidden>
+      <label for="login-code">6-digit code</label>
+      <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             pattern="[0-9]*" maxlength="6" required placeholder="000000" />
+      <button type="submit" class="primary">Verify</button>
+      <button type="button" class="signout-link" id="login-code-back">Use a different email</button>
+      <div class="sync-status" id="login-code-status"></div>
     </form>
   </section>
 
