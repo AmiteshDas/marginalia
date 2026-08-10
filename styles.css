@@ -64,6 +64,21 @@ main { padding: 16px 20px 40px; max-width: 640px; margin: 0 auto; }
 .view { display: none; }
 .view.active { display: block; }
 
+/* Login intro */
+.intro {
+  margin-bottom: 16px;
+}
+.intro p {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+.intro p:first-child {
+  font-family: "Source Serif", Georgia, serif;
+  font-size: 15px;
+  color: var(--ink);
+}
+
 /* Capture form */
 form.capture {
   background: var(--card);
