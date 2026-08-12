@@ -8,6 +8,9 @@ create extension if not exists "uuid-ossp";
 
 -- Safe to re-run: drops prior objects from this schema before recreating.
 -- Comment this block out once the schema is stable and has real data in it.
+-- If you're applying a schema change to an EXISTING project with real data,
+-- do NOT re-run this file — write an additive migration instead (see
+-- supabase-migration-002-archive-and-digest-exclude.sql for an example).
 drop table if exists digests cascade;
 drop table if exists notes cascade;
 drop table if exists categories cascade;
@@ -26,6 +29,8 @@ create table categories (
   user_id     uuid not null references auth.users(id) on delete cascade,
   name        text not null,
   color       text default '#4a4a4a',       -- hex, for quick visual tagging in the UI
+  exclude_from_digest boolean not null default false,  -- notes in this category are
+                                                          -- skipped by the weekly digest
   created_at  timestamptz not null default now(),
   unique (user_id, name)
 );
@@ -43,8 +48,10 @@ create table notes (
   context         text,                      -- free text: why it mattered
   source_used_at  timestamptz not null default now(),  -- "when using" — user-editable at capture
   created_at      timestamptz not null default now(),  -- server-set, immutable
-  client_id       text                        -- uuid generated on-device at capture time;
+  client_id       text,                       -- uuid generated on-device at capture time;
                                                -- lets the offline queue de-dupe safely on resync
+  archived_at     timestamptz                  -- set to hide from the Notes list; the note
+                                               -- itself is otherwise immutable (see trigger below)
 );
 
 create unique index notes_client_id_unique on notes (user_id, client_id) where client_id is not null;
@@ -82,11 +89,40 @@ create policy "categories_update_own" on categories
 create policy "categories_delete_own" on categories
   for delete using (auth.uid() = user_id);
 
--- Notes: select + insert only. No update/delete policy = append-only at the DB level.
+-- Notes: select + insert, plus a narrow update path for archiving only.
+-- No delete policy at all = nothing is ever truly removable at the DB level.
 create policy "notes_select_own" on notes
   for select using (auth.uid() = user_id);
 create policy "notes_insert_own" on notes
   for insert with check (auth.uid() = user_id);
+create policy "notes_update_archive_own" on notes
+  for update using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- Enforced in the DB, not just the app: an update may only ever change
+-- archived_at. Any attempt to edit quote/link/context/etc. is rejected.
+create or replace function notes_immutable_except_archive()
+returns trigger as $$
+begin
+  if new.quote           is distinct from old.quote
+     or new.link          is distinct from old.link
+     or new.source_type   is distinct from old.source_type
+     or new.context       is distinct from old.context
+     or new.source_used_at is distinct from old.source_used_at
+     or new.category_id   is distinct from old.category_id
+     or new.client_id     is distinct from old.client_id
+     or new.user_id       is distinct from old.user_id
+     or new.created_at    is distinct from old.created_at
+  then
+    raise exception 'notes are append-only — only archived_at may change';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger notes_immutable_except_archive_trg
+  before update on notes
+  for each row execute function notes_immutable_except_archive();
 
 -- Digests: written only by the service role (Edge Function), read by the owner
 create policy "digests_select_own" on digests
