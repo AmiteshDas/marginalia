@@ -9,11 +9,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 
-// Optional — email delivery of the digest via Resend. If RESEND_API_KEY
-// isn't set, the function just skips sending and keeps writing to `digests`
-// as before.
+// Optional — email delivery of the digest via Resend, sent to each user's
+// own account email. If RESEND_API_KEY isn't set, the function just skips
+// sending and keeps writing to `digests` as before.
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const DIGEST_EMAIL_TO = Deno.env.get("DIGEST_EMAIL_TO");
 const DIGEST_EMAIL_FROM = Deno.env.get("DIGEST_EMAIL_FROM") ?? "Marginalia <onboarding@resend.dev>";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
@@ -71,8 +70,8 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-async function sendDigestEmail(summary: string, weekStart: string, weekEnd: string, noteCount: number) {
-  if (!RESEND_API_KEY || !DIGEST_EMAIL_TO) return;
+async function sendDigestEmail(toEmail: string, summary: string, weekStart: string, weekEnd: string, noteCount: number) {
+  if (!RESEND_API_KEY) return;
 
   const html = `
     <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -90,7 +89,7 @@ async function sendDigestEmail(summary: string, weekStart: string, weekEnd: stri
     },
     body: JSON.stringify({
       from: DIGEST_EMAIL_FROM,
-      to: DIGEST_EMAIL_TO,
+      to: toEmail,
       subject: `Marginalia digest: ${weekStart} – ${weekEnd}`,
       html,
     }),
@@ -98,7 +97,7 @@ async function sendDigestEmail(summary: string, weekStart: string, weekEnd: stri
 
   if (!resp.ok) {
     // Don't fail the whole run over an email hiccup — the digest is already saved.
-    console.error(`Resend email failed: ${resp.status} ${await resp.text()}`);
+    console.error(`Resend email failed for ${toEmail}: ${resp.status} ${await resp.text()}`);
   }
 }
 
@@ -106,8 +105,6 @@ Deno.serve(async (_req) => {
   try {
     const { start, end } = startOfWeekWindow();
 
-    // Single-user assumption for now — fetch all users with notes in the window.
-    // If you extend to multi-user, loop over distinct user_ids instead.
     const { data: allNotes, error } = await supabase
       .from("notes")
       .select("id, quote, link, source_type, context, category_id, user_id, categories(name, exclude_from_digest)")
@@ -151,7 +148,18 @@ Deno.serve(async (_req) => {
       );
       if (insertError) throw insertError;
 
-      await sendDigestEmail(summary, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10), userNotes.length);
+      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+      if (userError) {
+        console.error(`Could not look up email for user ${userId}: ${userError.message}`);
+      } else if (userData.user.email) {
+        await sendDigestEmail(
+          userData.user.email,
+          summary,
+          start.toISOString().slice(0, 10),
+          end.toISOString().slice(0, 10),
+          userNotes.length
+        );
+      }
 
       // Web Push notification hook — wire in a push subscription table
       // and call your push-send logic here once notifications are set up.

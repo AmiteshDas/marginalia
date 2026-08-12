@@ -25,17 +25,19 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    supabase secrets set GEMINI_API_KEY=your-key-here
    ```
 2. Get a free Gemini API key at aistudio.google.com/apikey.
-3. (Optional) Email the digest to yourself using your existing Resend
+3. (Optional) Email each user their own digest using your existing Resend
    connection — add these secrets too:
    ```
    supabase secrets set RESEND_API_KEY=your-resend-key
-   supabase secrets set DIGEST_EMAIL_TO=you@example.com
    supabase secrets set DIGEST_EMAIL_FROM="Marginalia <onboarding@resend.dev>"
    ```
+   The function looks up each user's email from Supabase Auth (via the
+   service role key it already has) and sends their digest there — so as
+   you add more users, each one gets their own, not just you.
    `DIGEST_EMAIL_FROM` defaults to Resend's shared `onboarding@resend.dev`
    sender if you don't set it — swap in your own verified domain once you
-   have one. If `RESEND_API_KEY` or `DIGEST_EMAIL_TO` aren't set, the
-   function just skips emailing and keeps writing to `digests` as before.
+   have one. If `RESEND_API_KEY` isn't set, the function just skips
+   emailing and keeps writing to `digests` as before.
 4. Schedule it for Saturday 10:00 (your timezone) using `pg_cron` — in the
    SQL editor:
    ```sql
