@@ -147,9 +147,24 @@ button.primary:active { opacity: 0.85; }
 .sync-status.synced::before { content: "● "; color: #4a7c59; }
 
 /* Notes list */
+#toggle-archived {
+  display: block;
+  margin-bottom: 10px;
+}
 .note-card {
   border-bottom: 1px solid var(--rule);
   padding: 14px 0;
+}
+.note-card.archived { opacity: 0.6; }
+.note-card .archive-btn {
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
 }
 .note-card .quote {
   font-family: "Source Serif", Georgia, serif;

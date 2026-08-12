@@ -63,16 +63,20 @@ Deno.serve(async (_req) => {
 
     // Single-user assumption for now — fetch all users with notes in the window.
     // If you extend to multi-user, loop over distinct user_ids instead.
-    const { data: notes, error } = await supabase
+    const { data: allNotes, error } = await supabase
       .from("notes")
-      .select("id, quote, link, source_type, context, category_id, user_id, categories(name)")
+      .select("id, quote, link, source_type, context, category_id, user_id, categories(name, exclude_from_digest)")
       .gte("created_at", start.toISOString())
       .lte("created_at", end.toISOString())
       .order("created_at", { ascending: true });
 
     if (error) throw error;
 
-    if (!notes || notes.length === 0) {
+    // Categories marked exclude_from_digest are left out of the summary
+    // entirely, even though they still show up in the Notes list.
+    const notes = (allNotes ?? []).filter((n) => !n.categories?.exclude_from_digest);
+
+    if (notes.length === 0) {
       return new Response(JSON.stringify({ message: "No notes this week — skipping digest." }), {
         status: 200,
       });

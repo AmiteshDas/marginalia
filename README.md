@@ -11,6 +11,11 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    policies scoped to `auth.uid()`.
 3. Enable **Email (magic link)** auth under Authentication → Providers.
 4. Copy your Project URL and anon key into `public/supabase-client.js`.
+5. If you already ran `supabase-schema.sql` against a project with real data
+   in it, also run `supabase-migration-002-archive-and-digest-exclude.sql` —
+   it adds note archiving and per-category digest exclusion without
+   dropping any tables. New projects get both from `supabase-schema.sql`
+   directly and can skip this step.
 
 ## 2. Weekly digest function
 

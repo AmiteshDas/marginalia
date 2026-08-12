@@ -22,12 +22,12 @@ async function loadCategories() {
   return categoriesCache;
 }
 
-async function createCategory(name) {
+async function createCategory(name, excludeFromDigest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("not signed in");
   const { data, error } = await supabase
     .from("categories")
-    .insert({ name, user_id: user.id })
+    .insert({ name, user_id: user.id, exclude_from_digest: excludeFromDigest })
     .select()
     .single();
   if (error) throw error;
@@ -44,7 +44,7 @@ function renderCategoryPicker(pickerEl, hiddenInputEl) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "category-chip";
-    chip.textContent = cat.name;
+    chip.textContent = cat.exclude_from_digest ? `${cat.name} (excluded)` : cat.name;
     chip.dataset.id = cat.id;
     chip.style.borderColor = cat.color || "#c9c2b2";
     chip.addEventListener("click", () => {
@@ -61,8 +61,11 @@ function wireAddCategory(pickerEl, hiddenInputEl) {
   addBtn.addEventListener("click", async () => {
     const name = prompt("New category name");
     if (!name) return;
+    const excludeFromDigest = confirm(
+      "Exclude notes in this category from the weekly digest?\n\nOK = exclude, Cancel = include (default)"
+    );
     try {
-      const cat = await createCategory(name.trim());
+      const cat = await createCategory(name.trim(), excludeFromDigest);
       renderCategoryPicker(pickerEl, hiddenInputEl);
       const chip = [...pickerEl.querySelectorAll(".category-chip")].find(
         (c) => c.dataset.id === cat.id
@@ -168,34 +171,57 @@ document.addEventListener("visibilitychange", () => {
 // ------------------------------------------------------------
 // Notes list
 // ------------------------------------------------------------
+let showArchived = false;
+
+async function archiveNote(id, archive) {
+  await supabase
+    .from("notes")
+    .update({ archived_at: archive ? new Date().toISOString() : null })
+    .eq("id", id);
+  refreshNotesList();
+}
+
 async function refreshNotesList() {
   const listEl = document.getElementById("notes-list");
   if (!listEl) return;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("notes")
     .select("*, categories(name, color)")
     .order("created_at", { ascending: false })
     .limit(100);
+  query = showArchived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
 
+  const { data, error } = await query;
   if (error || !data) return;
 
   listEl.innerHTML = data
     .map(
       (n) => `
-    <div class="note-card">
+    <div class="note-card${n.archived_at ? " archived" : ""}">
       <div class="quote">${escapeHtml(n.quote)}</div>
       <div class="meta">
         <span>${n.categories?.name ?? "Uncategorised"}</span>
         <span>${n.source_type}</span>
         <span>${new Date(n.source_used_at).toLocaleDateString()}</span>
         ${n.link ? `<a href="${n.link}" target="_blank">link →</a>` : ""}
+        <button type="button" class="archive-btn" data-id="${n.id}" data-archive="${n.archived_at ? "0" : "1"}">${n.archived_at ? "Unarchive" : "Archive"}</button>
       </div>
       ${n.context ? `<div class="context">${escapeHtml(n.context)}</div>` : ""}
     </div>`
     )
     .join("");
+
+  listEl.querySelectorAll(".archive-btn").forEach((btn) => {
+    btn.addEventListener("click", () => archiveNote(btn.dataset.id, btn.dataset.archive === "1"));
+  });
 }
+
+document.getElementById("toggle-archived")?.addEventListener("click", (e) => {
+  showArchived = !showArchived;
+  e.target.textContent = showArchived ? "Show active" : "Show archived";
+  refreshNotesList();
+});
 
 function escapeHtml(str) {
   const div = document.createElement("div");
@@ -236,6 +262,7 @@ async function refreshDigest() {
 supabase
   .channel("notes-changes")
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, refreshNotesList)
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notes" }, refreshNotesList)
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "digests" }, refreshDigest)
   .subscribe();
 
