@@ -2,12 +2,31 @@ import { supabase } from "./supabase-client.js";
 import { queueNote, getPendingNotes, markSynced, markFailed } from "./idb-queue.js";
 
 // ------------------------------------------------------------
-// Service worker registration
+// Service worker registration — self-updating.
+// sw.js caches shell assets cache-first, so a stale registration would
+// otherwise keep serving old code indefinitely with no visible sign
+// anything's wrong. To fix that: check for a new sw.js on every load
+// and whenever the app is foregrounded (bypassing the browser's normal
+// once-a-day throttle), and reload once when a new service worker
+// actually takes over, so the fresh shell assets it just cached get used.
 // ------------------------------------------------------------
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/marginalia/sw.js", { scope: "/marginalia/" });
+  navigator.serviceWorker.register("/marginalia/sw.js", { scope: "/marginalia/" }).then((reg) => {
+    reg.update();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") reg.update();
+    });
+  });
+
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type === "TRY_SYNC") syncPendingNotes();
+  });
+
+  let reloadedForUpdate = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloadedForUpdate) return;
+    reloadedForUpdate = true;
+    window.location.reload();
   });
 }
 
