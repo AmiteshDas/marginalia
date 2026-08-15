@@ -9,6 +9,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 
+// Optional — email delivery of the digest via Resend, sent to each user's
+// own account email. If RESEND_API_KEY isn't set, the function just skips
+// sending and keeps writing to `digests` as before.
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const DIGEST_EMAIL_FROM = Deno.env.get("DIGEST_EMAIL_FROM") ?? "Marginalia <onboarding@resend.dev>";
+
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 function startOfWeekWindow(now = new Date()) {
@@ -41,7 +47,7 @@ Return plain text only, no markdown headers.`;
 
 async function callGemini(prompt: string): Promise<string> {
   const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -57,12 +63,48 @@ async function callGemini(prompt: string): Promise<string> {
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "No summary generated.";
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function sendDigestEmail(toEmail: string, summary: string, weekStart: string, weekEnd: string, noteCount: number) {
+  if (!RESEND_API_KEY) return;
+
+  const html = `
+    <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="margin-bottom: 4px;">Your Marginalia digest</h2>
+      <p style="color: #666; margin-top: 0;">${weekStart} – ${weekEnd} · ${noteCount} note${noteCount === 1 ? "" : "s"}</p>
+      <p style="white-space: pre-wrap; line-height: 1.5;">${escapeHtml(summary)}</p>
+    </div>
+  `;
+
+  const resp = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: DIGEST_EMAIL_FROM,
+      to: toEmail,
+      subject: `Marginalia digest: ${weekStart} – ${weekEnd}`,
+      html,
+    }),
+  });
+
+  if (!resp.ok) {
+    // Don't fail the whole run over an email hiccup — the digest is already saved.
+    console.error(`Resend email failed for ${toEmail}: ${resp.status} ${await resp.text()}`);
+  }
+}
+
 Deno.serve(async (_req) => {
   try {
     const { start, end } = startOfWeekWindow();
 
-    // Single-user assumption for now — fetch all users with notes in the window.
-    // If you extend to multi-user, loop over distinct user_ids instead.
     const { data: allNotes, error } = await supabase
       .from("notes")
       .select("id, quote, link, source_type, context, category_id, user_id, categories(name, exclude_from_digest)")
@@ -105,6 +147,19 @@ Deno.serve(async (_req) => {
         { onConflict: "user_id,week_start" }
       );
       if (insertError) throw insertError;
+
+      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+      if (userError) {
+        console.error(`Could not look up email for user ${userId}: ${userError.message}`);
+      } else if (userData.user.email) {
+        await sendDigestEmail(
+          userData.user.email,
+          summary,
+          start.toISOString().slice(0, 10),
+          end.toISOString().slice(0, 10),
+          userNotes.length
+        );
+      }
 
       // Web Push notification hook — wire in a push subscription table
       // and call your push-send logic here once notifications are set up.
