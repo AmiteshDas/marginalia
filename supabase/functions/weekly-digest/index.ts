@@ -25,6 +25,18 @@ function startOfWeekWindow(now = new Date()) {
   return { start, end };
 }
 
+function categoryBreakdown(notes: any[]): string {
+  const counts = new Map<string, number>();
+  for (const n of notes) {
+    const cat = n.categories?.name ?? "Uncategorised";
+    counts.set(cat, (counts.get(cat) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${name} — ${count} note${count === 1 ? "" : "s"}`)
+    .join("\n");
+}
+
 async function buildDigestPrompt(notes: any[]) {
   const lines = notes.map((n) => {
     const cat = n.categories?.name ?? "Uncategorised";
@@ -36,13 +48,15 @@ Below is a list of quotes they saved this week, each tagged with its category an
 
 ${lines.join("\n")}
 
-Write a short thematic digest (150-250 words):
-1. Identify 2-4 real themes or connections across these notes — not just one summary sentence per category.
-2. Note any surprising links between categories that don't obviously belong together.
-3. Keep the tone plain and direct, no filler, no "In this digest we will..." preamble.
-4. If the notes are too sparse or unrelated to find themes, say so plainly rather than forcing connections.
+Write a digest with two plain-text sections, no markdown symbols (no #, no **, no bullet dashes made of asterisks — use "-" for list items).
 
-Return plain text only, no markdown headers.`;
+THEMES
+List 2-4 real themes. Each one must be a concrete, specific claim tied directly to what's actually in the notes above — reference the actual subject matter, not a vague abstraction like "the intersection of ideas" or "a tapestry of thought." If a theme only really applies to one note, say so plainly instead of stretching it to cover others.
+
+CONNECTIONS
+Only include this section if there is a genuine, specific link between two or more notes from different categories — something a reader would find surprising and true, not a generic thread like "both relate to human experience." If no such link exists, omit this section entirely rather than manufacturing one.
+
+Keep language plain and direct — short sentences, concrete nouns, no filler ("In this digest we will..."), no dense abstract phrasing. If the notes are too sparse to say anything real, say so plainly instead of forcing content.`;
 }
 
 async function callGemini(prompt: string): Promise<string> {
@@ -134,7 +148,8 @@ Deno.serve(async (_req) => {
     const results = [];
     for (const [userId, userNotes] of byUser) {
       const prompt = await buildDigestPrompt(userNotes);
-      const summary = await callGemini(prompt);
+      const llmSummary = await callGemini(prompt);
+      const summary = `CATEGORIES THIS WEEK\n${categoryBreakdown(userNotes)}\n\n${llmSummary}`;
 
       const { error: insertError } = await supabase.from("digests").upsert(
         {
