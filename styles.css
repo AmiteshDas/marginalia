@@ -173,6 +173,19 @@ form.capture select {
 }
 form.capture textarea { resize: vertical; min-height: 64px; }
 
+/* Every browser/OS draws its own native select arrow differently (and
+   sometimes inconsistently between two selects on the same page) — drawn
+   here instead, so all selects match regardless of platform. */
+form.capture select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23566058' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
 .category-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .category-chip {
   border: 1px solid var(--rule);
