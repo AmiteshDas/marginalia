@@ -1,5 +1,6 @@
 import { supabase } from "./supabase-client.js";
 import { queueNote, getPendingNotes, markSynced, markFailed } from "./idb-queue.js";
+import { computeMomentum, daysSince, isColdReadingItem } from "./lib/momentum.js";
 
 // ------------------------------------------------------------
 // Service worker registration — self-updating.
@@ -249,6 +250,151 @@ function escapeHtml(str) {
 }
 
 // ------------------------------------------------------------
+// Reading dashboard — status/last_touched lifecycle on top of notes.
+// Starting an item is an explicit action; last_touched is stamped only
+// on those explicit actions, never inferred from viewing the dashboard.
+// ------------------------------------------------------------
+const TO_READ_CAP = 5;
+let toReadExpanded = false;
+
+async function startReading(id) {
+  await supabase
+    .from("notes")
+    .update({ status: "reading", last_touched: new Date().toISOString() })
+    .eq("id", id);
+  refreshReadingDashboard();
+}
+
+async function markProgress(id) {
+  await supabase.from("notes").update({ last_touched: new Date().toISOString() }).eq("id", id);
+  refreshReadingDashboard();
+}
+
+async function markDone(id) {
+  await supabase
+    .from("notes")
+    .update({ status: "done", last_touched: new Date().toISOString() })
+    .eq("id", id);
+  refreshReadingDashboard();
+}
+
+function momentumPill(item) {
+  const momentum = computeMomentum(item.last_touched);
+  return `<span class="momentum-pill momentum-${momentum}">${momentum}</span>`;
+}
+
+function readingCard(item) {
+  const days = daysSince(item.last_touched);
+  return `
+    <div class="reading-card">
+      <div class="reading-card-title">${escapeHtml(item.quote)}</div>
+      <div class="reading-card-meta">
+        <span>${item.source_type}</span>
+        <span>${item.categories?.name ?? "Uncategorised"}</span>
+        ${momentumPill(item)}
+        <span>${days}d ago</span>
+      </div>
+      <div class="reading-card-actions">
+        <button type="button" class="link-action" data-action="progress" data-id="${item.id}">Mark progress</button>
+        <button type="button" class="link-action" data-action="done" data-id="${item.id}">Mark done</button>
+      </div>
+    </div>`;
+}
+
+function toReadRow(item, now = new Date()) {
+  const stillWantThis = !!item.resurfaced_at;
+  return `
+    <div class="to-read-row">
+      <div class="to-read-title">${escapeHtml(item.quote)}</div>
+      <div class="to-read-meta">
+        <span>${item.source_type}</span>
+        <span>${item.categories?.name ?? "Uncategorised"}</span>
+        <span>${daysSince(item.source_used_at, now)}d in queue</span>
+        ${stillWantThis ? `<span class="resurface-flag">Still want to read this?</span>` : ""}
+        <button type="button" class="link-action" data-action="start" data-id="${item.id}">Start reading</button>
+      </div>
+    </div>`;
+}
+
+function topicRollup(items) {
+  const counts = new Map();
+  for (const item of items) {
+    const name = item.categories?.name ?? "Uncategorised";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return `<p class="reading-empty">Nothing tagged yet.</p>`;
+  return `<div class="topic-rollup">${sorted
+    .map(([name, count]) => `<span class="topic-rollup-row"><span>${escapeHtml(name)}</span><span>${count}</span></span>`)
+    .join("")}</div>`;
+}
+
+async function refreshReadingDashboard() {
+  const view = document.getElementById("view-reading");
+  if (!view) return;
+
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*, categories(name, color)")
+    .is("archived_at", null)
+    .order("last_touched", { ascending: false });
+  if (error || !data) return;
+
+  const reading = data.filter((n) => n.status === "reading");
+  const toRead = data.filter((n) => n.status === "to_read");
+  const activeForTopics = data.filter((n) => n.status !== "done");
+
+  const coldItems = reading.filter((n) => isColdReadingItem(n));
+  const calloutEl = document.getElementById("cold-callout");
+  if (calloutEl) {
+    calloutEl.hidden = coldItems.length === 0;
+    if (coldItems.length > 0) {
+      calloutEl.innerHTML = `<strong>${coldItems.length} item${coldItems.length === 1 ? "" : "s"} gone cold.</strong> It's been 21+ days since you touched ${coldItems.length === 1 ? "it" : "them"}.`;
+    }
+  }
+
+  const readingListEl = document.getElementById("reading-list");
+  if (readingListEl) {
+    readingListEl.innerHTML =
+      reading.length > 0
+        ? reading.map(readingCard).join("")
+        : `<p class="reading-empty">Nothing in progress — start something from To Read.</p>`;
+  }
+
+  const toReadListEl = document.getElementById("to-read-list");
+  const toReadMoreBtn = document.getElementById("to-read-more");
+  if (toReadListEl) {
+    const shown = toReadExpanded ? toRead : toRead.slice(0, TO_READ_CAP);
+    toReadListEl.innerHTML =
+      shown.length > 0
+        ? shown.map((item) => toReadRow(item)).join("")
+        : `<p class="reading-empty">Nothing queued.</p>`;
+    if (toReadMoreBtn) {
+      const remaining = toRead.length - shown.length;
+      toReadMoreBtn.hidden = toReadExpanded || remaining <= 0;
+      toReadMoreBtn.textContent = `+${remaining} more`;
+    }
+  }
+
+  const rollupEl = document.getElementById("topic-rollup");
+  if (rollupEl) rollupEl.innerHTML = topicRollup(activeForTopics);
+
+  view.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const { action, id } = btn.dataset;
+      if (action === "start") startReading(id);
+      if (action === "progress") markProgress(id);
+      if (action === "done") markDone(id);
+    });
+  });
+}
+
+document.getElementById("to-read-more")?.addEventListener("click", () => {
+  toReadExpanded = true;
+  refreshReadingDashboard();
+});
+
+// ------------------------------------------------------------
 // Digest view
 // ------------------------------------------------------------
 async function refreshDigest() {
@@ -280,8 +426,14 @@ async function refreshDigest() {
 // ------------------------------------------------------------
 supabase
   .channel("notes-changes")
-  .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, refreshNotesList)
-  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notes" }, refreshNotesList)
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, () => {
+    refreshNotesList();
+    refreshReadingDashboard();
+  })
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notes" }, () => {
+    refreshNotesList();
+    refreshReadingDashboard();
+  })
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "digests" }, refreshDigest)
   .subscribe();
 
@@ -392,6 +544,7 @@ async function initAuth() {
       if (pickerEl && hiddenInputEl) renderCategoryPicker(pickerEl, hiddenInputEl);
       syncPendingNotes();
       refreshNotesList();
+      refreshReadingDashboard();
       refreshDigest();
     }
   });
@@ -413,6 +566,7 @@ if (tabbar) {
       const view = document.getElementById(`view-${btn.dataset.view}`);
       view.classList.add("active");
       if (btn.dataset.view === "notes") refreshNotesList();
+      if (btn.dataset.view === "reading") refreshReadingDashboard();
       if (btn.dataset.view === "digest") refreshDigest();
     });
   });

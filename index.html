@@ -88,6 +88,26 @@
     <div id="notes-list"></div>
   </section>
 
+  <!-- READING -->
+  <section class="view" id="view-reading">
+    <div class="cold-callout" id="cold-callout" hidden></div>
+
+    <h2 class="section-heading">Currently Reading</h2>
+    <div id="reading-list"></div>
+
+    <div class="reading-columns">
+      <div class="reading-col">
+        <h2 class="section-heading">To Read</h2>
+        <div id="to-read-list"></div>
+        <button type="button" class="link-action" id="to-read-more" hidden></button>
+      </div>
+      <div class="reading-col">
+        <h2 class="section-heading">You're Reading About</h2>
+        <div id="topic-rollup"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- DIGEST -->
   <section class="view" id="view-digest">
     <div id="digest-content">
@@ -100,6 +120,7 @@
 <nav class="tabbar" hidden>
   <button data-view="capture" class="active">Capture</button>
   <button data-view="notes">Notes</button>
+  <button data-view="reading">Reading</button>
   <button data-view="digest">This Week</button>
 </nav>
 

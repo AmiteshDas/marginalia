@@ -4,6 +4,7 @@
 // writes the result to `digests`, and (optionally) sends a Web Push notification.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isColdReadingItem, needsResurface, daysSince } from "../../../lib/momentum.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -57,6 +58,27 @@ CONNECTIONS
 Only include this section if there is a genuine, specific link between two or more notes from different categories — something a reader would find surprising and true, not a generic thread like "both relate to human experience." If no such link exists, omit this section entirely rather than manufacturing one.
 
 Keep language plain and direct — short sentences, concrete nouns, no filler ("In this digest we will..."), no dense abstract phrasing. If the notes are too sparse to say anything real, say so plainly instead of forcing content.`;
+}
+
+// A snapshot of live dashboard state — reading items gone cold, and
+// to_read items hitting their 1-month resurface point. This queries the
+// exact same momentum/lifecycle logic the dashboard renders with
+// (lib/momentum.js), never a second set of thresholds.
+function buildStalledSection(items: any[]): string {
+  const now = new Date();
+  const coldReading = items.filter((n) => n.status === "reading" && isColdReadingItem(n, now));
+  const resurfacing = items.filter((n) => n.status === "to_read" && needsResurface(n, now));
+
+  if (coldReading.length === 0 && resurfacing.length === 0) return "";
+
+  const lines: string[] = ["STALLED ITEMS"];
+  for (const n of coldReading) {
+    lines.push(`- Cold (${daysSince(n.last_touched, now)}d untouched): "${n.quote}"`);
+  }
+  for (const n of resurfacing) {
+    lines.push(`- Still want to read this? (queued ${daysSince(n.last_touched ?? n.created_at, now)}d): "${n.quote}"`);
+  }
+  return lines.join("\n");
 }
 
 async function callGemini(prompt: string): Promise<string> {
@@ -132,10 +154,20 @@ Deno.serve(async (_req) => {
     // entirely, even though they still show up in the Notes list.
     const notes = (allNotes ?? []).filter((n) => !n.categories?.exclude_from_digest);
 
-    if (notes.length === 0) {
-      return new Response(JSON.stringify({ message: "No notes this week — skipping digest." }), {
-        status: 200,
-      });
+    // Dashboard-state snapshot: reading/to_read items, independent of the
+    // weekly window, so stalled items surface even in a week with no new
+    // captures. Same query shape the Reading tab reads, minus categories.
+    const { data: dashboardNotes, error: dashboardError } = await supabase
+      .from("notes")
+      .select("id, quote, status, last_touched, created_at, resurfaced_at, user_id")
+      .in("status", ["reading", "to_read"])
+      .is("archived_at", null);
+    if (dashboardError) throw dashboardError;
+
+    const dashboardByUser = new Map<string, any[]>();
+    for (const n of dashboardNotes ?? []) {
+      if (!dashboardByUser.has(n.user_id)) dashboardByUser.set(n.user_id, []);
+      dashboardByUser.get(n.user_id)!.push(n);
     }
 
     // Group by user in case of future multi-user use
@@ -145,11 +177,24 @@ Deno.serve(async (_req) => {
       byUser.get(n.user_id)!.push(n);
     }
 
+    // A user with stalled items but no new notes this week still gets a
+    // digest — otherwise silently-archived items would never surface.
+    const userIds = new Set([...byUser.keys(), ...dashboardByUser.keys()]);
+
     const results = [];
-    for (const [userId, userNotes] of byUser) {
-      const prompt = await buildDigestPrompt(userNotes);
-      const llmSummary = await callGemini(prompt);
-      const summary = `CATEGORIES THIS WEEK\n${categoryBreakdown(userNotes)}\n\n${llmSummary}`;
+    for (const userId of userIds) {
+      const userNotes = byUser.get(userId) ?? [];
+      const stalledSection = buildStalledSection(dashboardByUser.get(userId) ?? []);
+
+      let summary: string;
+      if (userNotes.length > 0) {
+        const prompt = await buildDigestPrompt(userNotes);
+        const llmSummary = await callGemini(prompt);
+        summary = `CATEGORIES THIS WEEK\n${categoryBreakdown(userNotes)}\n\n${llmSummary}`;
+      } else {
+        summary = "No new notes this week.";
+      }
+      if (stalledSection) summary += `\n\n${stalledSection}`;
 
       const { error: insertError } = await supabase.from("digests").upsert(
         {
