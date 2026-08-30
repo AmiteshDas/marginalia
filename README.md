@@ -29,6 +29,8 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    `notes_view`/`shelf_view` — read-only views over the same table, scoped
    to each kind's relevant columns, for a cleaner picture when browsing in
    the SQL editor (the app itself queries `notes` directly).
+8. Also run `supabase-migration-005-paper-source-type.sql` — adds `paper`
+   ("Long-form Paper") to the `source_type` enum.
 
 ## 2. Weekly digest function
 

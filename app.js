@@ -338,24 +338,25 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// A form that starts collapsed behind a toggle link, to keep a page from
-// growing tall once it's mostly a list — used for both the Notes capture
-// form and the Shelf's "add another" form.
-function wireCollapsibleForm(toggleId, formId) {
+// A section that starts collapsed behind a toggle button, to keep a page
+// from growing tall — used for the Shelf's "add another" form and for
+// the Notes list (capturing is the primary reason to open the app;
+// browsing what you've already written is secondary).
+function wireCollapsibleForm(toggleId, targetId, openedLabel = "Hide") {
   const toggleBtn = document.getElementById(toggleId);
-  const formEl = document.getElementById(formId);
-  if (!toggleBtn || !formEl) return null;
-  const openLabel = toggleBtn.textContent;
+  const targetEl = document.getElementById(targetId);
+  if (!toggleBtn || !targetEl) return null;
+  const closedLabel = toggleBtn.textContent;
 
   toggleBtn.addEventListener("click", () => {
-    formEl.hidden = !formEl.hidden;
-    toggleBtn.textContent = formEl.hidden ? openLabel : "Hide form";
+    targetEl.hidden = !targetEl.hidden;
+    toggleBtn.textContent = targetEl.hidden ? closedLabel : openedLabel;
   });
 
   return {
     collapse() {
-      formEl.hidden = true;
-      toggleBtn.textContent = openLabel;
+      targetEl.hidden = true;
+      toggleBtn.textContent = closedLabel;
     },
   };
 }
@@ -757,17 +758,16 @@ if (dateEl) {
   });
 }
 
-const notesFormToggle = wireCollapsibleForm("toggle-capture-form", "capture-form");
-const shelfFormToggle = wireCollapsibleForm("toggle-shelf-form", "add-to-shelf-form");
+// Notes list stays collapsed by default — capturing is why people open
+// the app; browsing what you've already written is the secondary case.
+wireCollapsibleForm("toggle-notes-list", "notes-list-wrap", "Hide notes");
+const shelfFormToggle = wireCollapsibleForm("toggle-shelf-form", "add-to-shelf-form", "Hide form");
 
 const mainCaptureForm = document.getElementById("capture-form");
 if (mainCaptureForm && document.getElementById("view-notes")) {
   initCaptureForm({
     formEl: mainCaptureForm,
-    onSaved: () => {
-      refreshNotesList();
-      notesFormToggle?.collapse();
-    },
+    onSaved: () => refreshNotesList(),
   });
 }
 
