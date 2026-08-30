@@ -154,9 +154,15 @@ Deno.serve(async (_req) => {
     // entirely, even though they still show up in the Notes list.
     const notes = (allNotes ?? []).filter((n) => !n.categories?.exclude_from_digest);
 
+    if (notes.length === 0) {
+      return new Response(JSON.stringify({ message: "No notes this week — skipping digest." }), {
+        status: 200,
+      });
+    }
+
     // Dashboard-state snapshot: reading/to_read items, independent of the
-    // weekly window, so stalled items surface even in a week with no new
-    // captures. Same query shape the Reading tab reads, minus categories.
+    // weekly window, so a digest that does run also reports what's stalled.
+    // Same query shape the Reading tab reads, minus categories.
     const { data: dashboardNotes, error: dashboardError } = await supabase
       .from("notes")
       .select("id, quote, status, last_touched, created_at, resurfaced_at, user_id")
@@ -177,23 +183,13 @@ Deno.serve(async (_req) => {
       byUser.get(n.user_id)!.push(n);
     }
 
-    // A user with stalled items but no new notes this week still gets a
-    // digest — otherwise silently-archived items would never surface.
-    const userIds = new Set([...byUser.keys(), ...dashboardByUser.keys()]);
-
     const results = [];
-    for (const userId of userIds) {
-      const userNotes = byUser.get(userId) ?? [];
+    for (const [userId, userNotes] of byUser) {
       const stalledSection = buildStalledSection(dashboardByUser.get(userId) ?? []);
 
-      let summary: string;
-      if (userNotes.length > 0) {
-        const prompt = await buildDigestPrompt(userNotes);
-        const llmSummary = await callGemini(prompt);
-        summary = `CATEGORIES THIS WEEK\n${categoryBreakdown(userNotes)}\n\n${llmSummary}`;
-      } else {
-        summary = "No new notes this week.";
-      }
+      const prompt = await buildDigestPrompt(userNotes);
+      const llmSummary = await callGemini(prompt);
+      let summary = `CATEGORIES THIS WEEK\n${categoryBreakdown(userNotes)}\n\n${llmSummary}`;
       if (stalledSection) summary += `\n\n${stalledSection}`;
 
       const { error: insertError } = await supabase.from("digests").upsert(
