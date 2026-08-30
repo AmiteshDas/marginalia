@@ -14,7 +14,7 @@ function openDB() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         const store = db.createObjectStore(STORE, { keyPath: "client_id" });
-        store.createIndex("status", "status", { unique: false });
+        store.createIndex("queue_status", "queue_status", { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -27,7 +27,9 @@ export async function queueNote(note) {
   const record = {
     ...note,
     client_id: note.client_id ?? crypto.randomUUID(),
-    status: "pending", // pending | synced | failed
+    // Local sync bookkeeping only — distinct from the note's own `status`
+    // field (to_read/reading/done), which passes through untouched.
+    queue_status: "pending", // pending | synced | failed
     queued_at: new Date().toISOString(),
   };
   return new Promise((resolve, reject) => {
@@ -43,7 +45,7 @@ export async function getPendingNotes() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const req = tx.objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result.filter((n) => n.status !== "synced"));
+    req.onsuccess = () => resolve(req.result.filter((n) => n.queue_status !== "synced"));
     req.onerror = () => reject(req.error);
   });
 }
@@ -57,7 +59,7 @@ export async function markSynced(clientId) {
     getReq.onsuccess = () => {
       const record = getReq.result;
       if (record) {
-        record.status = "synced";
+        record.queue_status = "synced";
         store.put(record);
       }
     };
@@ -75,7 +77,7 @@ export async function markFailed(clientId) {
     getReq.onsuccess = () => {
       const record = getReq.result;
       if (record) {
-        record.status = "failed";
+        record.queue_status = "failed";
         store.put(record);
       }
     };
