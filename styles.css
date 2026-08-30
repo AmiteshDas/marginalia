@@ -213,6 +213,11 @@ button.primary:active { opacity: 0.85; }
   color: var(--ink-soft);
   font-style: italic;
 }
+.note-card .note-source {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--accent);
+}
 
 /* Reading dashboard */
 .section-heading {

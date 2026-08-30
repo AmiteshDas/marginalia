@@ -85,6 +85,63 @@ function renderCategoryPicker(pickerEl, hiddenInputEl) {
   });
 }
 
+// ------------------------------------------------------------
+// Shelf items — cached so a note can optionally reference the shelf item
+// it came from ("From your shelf" dropdown + the "from: X" tag in Notes).
+// Includes archived items too (excluded only from the dropdown), so a
+// note's source still resolves to a real title after its shelf item is
+// silently archived.
+// ------------------------------------------------------------
+let shelfItemsCache = [];
+
+async function loadShelfItems() {
+  const { data, error } = await supabase
+    .from("notes")
+    .select("id, quote, link, source_type, category_id, archived_at")
+    .eq("kind", "shelf")
+    .order("last_touched", { ascending: false });
+  if (!error && data) shelfItemsCache = data;
+  return shelfItemsCache;
+}
+
+function renderShelfConnectDropdown(selectEl) {
+  if (!selectEl) return;
+  const previousValue = selectEl.value;
+  selectEl.innerHTML = `<option value="">— none —</option>`;
+  shelfItemsCache
+    .filter((item) => !item.archived_at)
+    .forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.quote;
+      selectEl.appendChild(option);
+    });
+  selectEl.value = [...selectEl.options].some((o) => o.value === previousValue) ? previousValue : "";
+}
+
+function wireShelfConnectDropdown(formEl) {
+  const selectEl = formEl.querySelector("#source_item_id");
+  if (!selectEl) return;
+  selectEl.addEventListener("change", () => {
+    const item = shelfItemsCache.find((i) => i.id === selectEl.value);
+    if (!item) return;
+    // Picking a source deliberately overwrites these — it's meant to save
+    // re-typing what the shelf item already has, not just suggest it.
+    const linkEl = formEl.querySelector("#link");
+    const sourceTypeEl = formEl.querySelector("#source_type");
+    const hiddenCategoryEl = formEl.querySelector("#category_id");
+    if (linkEl) linkEl.value = item.link ?? "";
+    if (sourceTypeEl) sourceTypeEl.value = item.source_type;
+    if (hiddenCategoryEl && item.category_id) {
+      hiddenCategoryEl.value = item.category_id;
+      const pickerEl = formEl.querySelector("#category-picker");
+      pickerEl?.querySelectorAll(".category-chip").forEach((c) =>
+        c.classList.toggle("selected", c.dataset.id === item.category_id)
+      );
+    }
+  });
+}
+
 function wireAddCategory(pickerEl, hiddenInputEl) {
   const addBtn = pickerEl.querySelector(".add-new");
   addBtn.addEventListener("click", async () => {
@@ -117,6 +174,13 @@ export async function initCaptureForm({ formEl, prefill = {}, onSaved } = {}) {
   renderCategoryPicker(pickerEl, hiddenInputEl);
   wireAddCategory(pickerEl, hiddenInputEl);
 
+  const sourceItemEl = formEl.querySelector("#source_item_id");
+  if (sourceItemEl) {
+    await loadShelfItems();
+    renderShelfConnectDropdown(sourceItemEl);
+    wireShelfConnectDropdown(formEl);
+  }
+
   if (prefill.quote) formEl.querySelector("#quote").value = prefill.quote;
   if (prefill.link) formEl.querySelector("#link").value = prefill.link;
 
@@ -141,8 +205,10 @@ export async function initCaptureForm({ formEl, prefill = {}, onSaved } = {}) {
       // Recording a quote means you've already engaged with the source —
       // distinct from the Shelf's "add to read later" flow, which starts
       // items at to_read instead.
+      kind: "note",
       status: "done",
       last_touched: now,
+      source_item_id: sourceItemEl?.value || null,
     };
 
     if (!note.quote) return;
@@ -228,6 +294,7 @@ async function refreshNotesList() {
   let query = supabase
     .from("notes")
     .select("*, categories(name, color)")
+    .eq("kind", "note")
     .order("created_at", { ascending: false })
     .limit(100);
   query = showArchived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
@@ -236,8 +303,9 @@ async function refreshNotesList() {
   if (error || !data) return;
 
   listEl.innerHTML = data
-    .map(
-      (n) => `
+    .map((n) => {
+      const source = n.source_item_id ? shelfItemsCache.find((i) => i.id === n.source_item_id) : null;
+      return `
     <div class="note-card${n.archived_at ? " archived" : ""}">
       <div class="quote">${escapeHtml(n.quote)}</div>
       <div class="meta">
@@ -247,9 +315,10 @@ async function refreshNotesList() {
         ${n.link ? `<a href="${n.link}" target="_blank">link →</a>` : ""}
         <button type="button" class="archive-btn" data-id="${n.id}" data-archive="${n.archived_at ? "0" : "1"}">${n.archived_at ? "Unarchive" : "Archive"}</button>
       </div>
+      ${source ? `<div class="note-source">from: ${escapeHtml(source.quote)}</div>` : ""}
       ${n.context ? `<div class="context">${escapeHtml(n.context)}</div>` : ""}
-    </div>`
-    )
+    </div>`;
+    })
     .join("");
 
   listEl.querySelectorAll(".archive-btn").forEach((btn) => {
@@ -267,6 +336,28 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// A form that starts collapsed behind a toggle link, to keep a page from
+// growing tall once it's mostly a list — used for both the Notes capture
+// form and the Shelf's "add another" form.
+function wireCollapsibleForm(toggleId, formId) {
+  const toggleBtn = document.getElementById(toggleId);
+  const formEl = document.getElementById(formId);
+  if (!toggleBtn || !formEl) return null;
+  const openLabel = toggleBtn.textContent;
+
+  toggleBtn.addEventListener("click", () => {
+    formEl.hidden = !formEl.hidden;
+    toggleBtn.textContent = formEl.hidden ? openLabel : "Hide form";
+  });
+
+  return {
+    collapse() {
+      formEl.hidden = true;
+      toggleBtn.textContent = openLabel;
+    },
+  };
 }
 
 // ------------------------------------------------------------
@@ -328,6 +419,7 @@ function initShelfForm() {
       category_id: hiddenInputEl.value || null,
       context: document.getElementById("shelf_context").value.trim() || null,
       source_used_at: now,
+      kind: "shelf",
       status: "to_read",
       last_touched: now,
       client_id: crypto.randomUUID(),
@@ -342,7 +434,10 @@ function initShelfForm() {
     formEl.reset();
     renderCategoryPicker(pickerEl, hiddenInputEl);
     if (statusEl) statusEl.textContent = "Added to shelf.";
+    await loadShelfItems();
+    renderShelfConnectDropdown(document.getElementById("source_item_id"));
     refreshReadingDashboard();
+    shelfFormToggle?.collapse();
   });
 }
 
@@ -404,6 +499,7 @@ async function refreshReadingDashboard() {
   const { data, error } = await supabase
     .from("notes")
     .select("*, categories(name, color)")
+    .eq("kind", "shelf")
     .is("archived_at", null)
     .order("last_touched", { ascending: false });
   if (error || !data) return;
@@ -494,11 +590,15 @@ async function refreshDigest() {
 // ------------------------------------------------------------
 supabase
   .channel("notes-changes")
-  .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, () => {
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, async () => {
+    await loadShelfItems();
+    renderShelfConnectDropdown(document.getElementById("source_item_id"));
     refreshNotesList();
     refreshReadingDashboard();
   })
-  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notes" }, () => {
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notes" }, async () => {
+    await loadShelfItems();
+    renderShelfConnectDropdown(document.getElementById("source_item_id"));
     refreshNotesList();
     refreshReadingDashboard();
   })
@@ -613,6 +713,8 @@ async function initAuth() {
       const shelfPickerEl = document.getElementById("shelf-category-picker");
       const shelfHiddenInputEl = document.getElementById("shelf_category_id");
       if (shelfPickerEl && shelfHiddenInputEl) renderCategoryPicker(shelfPickerEl, shelfHiddenInputEl);
+      await loadShelfItems();
+      renderShelfConnectDropdown(document.getElementById("source_item_id"));
       syncPendingNotes();
       refreshNotesList();
       refreshReadingDashboard();
@@ -655,11 +757,17 @@ if (dateEl) {
   });
 }
 
+const notesFormToggle = wireCollapsibleForm("toggle-capture-form", "capture-form");
+const shelfFormToggle = wireCollapsibleForm("toggle-shelf-form", "add-to-shelf-form");
+
 const mainCaptureForm = document.getElementById("capture-form");
 if (mainCaptureForm && document.getElementById("view-notes")) {
   initCaptureForm({
     formEl: mainCaptureForm,
-    onSaved: () => refreshNotesList(),
+    onSaved: () => {
+      refreshNotesList();
+      notesFormToggle?.collapse();
+    },
   });
 }
 
