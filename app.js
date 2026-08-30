@@ -8,10 +8,17 @@ import { computeMomentum, daysSince, isColdReadingItem } from "./lib/momentum.js
 // otherwise keep serving old code indefinitely with no visible sign
 // anything's wrong. To fix that: check for a new sw.js on every load
 // and whenever the app is foregrounded (bypassing the browser's normal
-// once-a-day throttle), and reload once when a new service worker
-// actually takes over, so the fresh shell assets it just cached get used.
+// once-a-day throttle). When a new service worker actually takes over,
+// show a banner rather than reloading immediately — an unconditional
+// reload could silently wipe an in-progress, unsaved capture form.
 // ------------------------------------------------------------
 if ("serviceWorker" in navigator) {
+  // If the page is already controlled at registration time, any later
+  // controllerchange is a genuine update. If not, the first activation
+  // (clients.claim() on a fresh install) also fires controllerchange —
+  // that's not an "update," so it shouldn't prompt one.
+  const hadController = !!navigator.serviceWorker.controller;
+
   navigator.serviceWorker.register("/marginalia/sw.js", { scope: "/marginalia/" }).then((reg) => {
     reg.update();
     document.addEventListener("visibilitychange", () => {
@@ -23,10 +30,12 @@ if ("serviceWorker" in navigator) {
     if (event.data?.type === "TRY_SYNC") syncPendingNotes();
   });
 
-  let reloadedForUpdate = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloadedForUpdate) return;
-    reloadedForUpdate = true;
+    if (!hadController) return;
+    document.getElementById("update-banner")?.removeAttribute("hidden");
+  });
+
+  document.getElementById("update-reload-btn")?.addEventListener("click", () => {
     window.location.reload();
   });
 }

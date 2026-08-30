@@ -36,6 +36,29 @@ h1, h2, h3 {
   letter-spacing: -0.01em;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12.5px;
+}
+.update-banner[hidden] { display: none; }
+.update-banner button {
+  border: 1px solid var(--paper);
+  border-radius: 3px;
+  background: none;
+  color: var(--paper);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 header.masthead {
   padding: 20px 20px 14px;
   border-bottom: 1px solid var(--rule);
