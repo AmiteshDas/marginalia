@@ -164,6 +164,21 @@ button.primary {
 }
 button.primary:active { opacity: 0.85; }
 
+.toggle-btn {
+  display: block;
+  margin: 4px 0 18px;
+  padding: 9px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toggle-btn:active { opacity: 0.85; }
+
 .sync-status {
   margin-top: 10px;
   font-size: 12px;

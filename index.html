@@ -54,8 +54,7 @@
 
   <!-- NOTES (capture + list) -->
   <section class="view" id="view-notes">
-    <button type="button" class="link-action" id="toggle-capture-form">+ New note</button>
-    <form class="capture" id="capture-form" hidden>
+    <form class="capture" id="capture-form">
       <label for="quote">Quote</label>
       <textarea id="quote" required placeholder="What caught you?"></textarea>
 
@@ -92,8 +91,11 @@
       <div class="sync-status" id="sync-status"></div>
     </form>
 
-    <button type="button" class="signout-link" id="toggle-archived">Show archived</button>
-    <div id="notes-list"></div>
+    <button type="button" class="toggle-btn" id="toggle-notes-list">Show your notes</button>
+    <div id="notes-list-wrap" hidden>
+      <button type="button" class="signout-link" id="toggle-archived">Show archived</button>
+      <div id="notes-list"></div>
+    </div>
   </section>
 
   <!-- SHELF -->
@@ -115,7 +117,7 @@
       </div>
     </div>
 
-    <button type="button" class="link-action" id="toggle-shelf-form">Want to add something else to the shelf?</button>
+    <button type="button" class="toggle-btn" id="toggle-shelf-form">Want to add something else to the shelf?</button>
     <form class="capture" id="add-to-shelf-form" hidden>
       <label for="shelf_title">What is it?</label>
       <input id="shelf_title" type="text" required placeholder="Title or headline" />
