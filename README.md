@@ -16,6 +16,12 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    it adds note archiving and per-category digest exclusion without
    dropping any tables. New projects get both from `supabase-schema.sql`
    directly and can skip this step.
+6. Also run `supabase-migration-003-reading-status.sql` — it adds the
+   `status` (to_read/reading/done), `last_touched`, and `resurfaced_at`
+   columns that power the Reading tab, and widens the notes' append-only
+   trigger to allow those columns (plus the existing `archived_at`) to
+   change. Existing notes are backfilled as `done` so they aren't swept
+   into the to_read archiving lifecycle.
 
 ## 2. Weekly digest function
 
@@ -53,6 +59,33 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    );
    ```
    Set the Postgres timezone first if needed: `alter database postgres set timezone to 'Europe/London';`
+
+## 2b. Stale to_read resurface + archive job
+
+1. Deploy it the same way as the weekly digest:
+   ```
+   supabase functions deploy archive-stale
+   ```
+2. Schedule it daily (any time works — the 1-month/1-week windows it
+   checks don't need precise timing) using `pg_cron`:
+   ```sql
+   select cron.schedule(
+     'archive-stale-daily',
+     '0 3 * * *',  -- 3:00am daily
+     $$
+     select net.http_post(
+       url := 'https://YOUR-PROJECT.functions.supabase.co/archive-stale',
+       headers := '{"Authorization": "Bearer YOUR_SERVICE_ROLE_KEY"}'::jsonb
+     );
+     $$
+   );
+   ```
+   On each run it flags (`resurfaced_at`) `to_read` items untouched for a
+   month — shown in the Reading tab and the weekly digest as "still want
+   to read this?" — and silently archives (`archived_at`, soft-delete)
+   ones still untouched a week after being flagged. It shares its logic
+   with the Reading tab and the digest via `lib/momentum.js`, so all three
+   agree on what counts as stale.
 
 ## 3. Hosting — GitHub Pages
 

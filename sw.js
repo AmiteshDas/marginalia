@@ -2,7 +2,7 @@
 // SHELL_ASSETS file changes — it's what forces installed PWAs to drop their
 // stale cache and fetch the new files, since the fetch handler below is
 // cache-first for these paths.
-const CACHE = "marginalia-shell-v5";
+const CACHE = "marginalia-shell-v6";
 const BASE = "/marginalia";
 const SHELL_ASSETS = [
   `${BASE}/index.html`,
@@ -11,6 +11,7 @@ const SHELL_ASSETS = [
   `${BASE}/app.js`,
   `${BASE}/idb-queue.js`,
   `${BASE}/manifest.json`,
+  `${BASE}/lib/momentum.js`,
 ];
 
 self.addEventListener("install", (event) => {
