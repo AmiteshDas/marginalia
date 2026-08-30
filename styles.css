@@ -104,6 +104,18 @@ header.masthead .date {
   margin: 0 0 10px;
 }
 .about-panel p:last-child { margin-bottom: 0; }
+.about-divider {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 14px 0;
+}
+.about-panel .changelog-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
 .signout-link {
   border: none;
   background: none;
