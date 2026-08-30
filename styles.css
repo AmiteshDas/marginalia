@@ -78,21 +78,17 @@ header.masthead .date {
   position: absolute;
   top: 20px;
   right: 20px;
-  border: none;
-  background: none;
   color: var(--ink-soft);
   font: inherit;
   font-size: 12px;
   text-decoration: underline;
-  cursor: pointer;
-  padding: 0;
 }
 .about-panel {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--rule);
   background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 18px;
 }
-.about-panel[hidden] { display: none; }
 .about-panel h2 {
   font-size: 16px;
   margin: 0 0 10px;

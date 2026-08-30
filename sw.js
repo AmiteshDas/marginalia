@@ -2,11 +2,12 @@
 // SHELL_ASSETS file changes — it's what forces installed PWAs to drop their
 // stale cache and fetch the new files, since the fetch handler below is
 // cache-first for these paths.
-const CACHE = "marginalia-shell-v13";
+const CACHE = "marginalia-shell-v14";
 const BASE = "/marginalia";
 const SHELL_ASSETS = [
   `${BASE}/index.html`,
   `${BASE}/capture.html`,
+  `${BASE}/about.html`,
   `${BASE}/styles.css`,
   `${BASE}/app.js`,
   `${BASE}/idb-queue.js`,
