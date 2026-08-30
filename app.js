@@ -120,14 +120,20 @@ export async function initCaptureForm({ formEl, prefill = {}, onSaved } = {}) {
     e.preventDefault();
     const statusEl = formEl.querySelector("#sync-status");
 
+    const now = new Date().toISOString();
     const note = {
       quote: formEl.querySelector("#quote").value.trim(),
       link: formEl.querySelector("#link").value.trim() || null,
       source_type: formEl.querySelector("#source_type").value,
       category_id: hiddenInputEl.value || null,
       context: formEl.querySelector("#context").value.trim() || null,
-      source_used_at: usedAtEl ? new Date(usedAtEl.value).toISOString() : new Date().toISOString(),
+      source_used_at: usedAtEl ? new Date(usedAtEl.value).toISOString() : now,
       client_id: crypto.randomUUID(),
+      // Recording a quote means you've already engaged with the source —
+      // distinct from the Shelf's "add to read later" flow, which starts
+      // items at to_read instead.
+      status: "done",
+      last_touched: now,
     };
 
     if (!note.quote) return;
@@ -159,7 +165,12 @@ export async function syncPendingNotes() {
   if (!user) return; // not signed in yet — nothing to sync against
 
   for (const note of pending) {
-    const { client_id, status, queued_at, ...payload } = note;
+    const { client_id, queue_status, queued_at, status, ...rest } = note;
+    // A note still queued from before `queue_status` existed has no such
+    // field — its `status` is really the old queue-bookkeeping value
+    // ("pending"/"failed"), not a valid reading_status, so drop it and let
+    // the column default apply instead of inserting garbage into the enum.
+    const payload = queue_status ? { ...rest, status } : rest;
     const { error } = await supabase.from("notes").insert({
       ...payload,
       client_id,
@@ -276,6 +287,54 @@ async function markDone(id) {
     .update({ status: "done", last_touched: new Date().toISOString() })
     .eq("id", id);
   refreshReadingDashboard();
+}
+
+// "Add to Shelf" — the queuing counterpart to the quote-capture form.
+// Different mindframe, different form: no quote required, since you
+// haven't read this yet. Inserts directly (no offline queue) since this
+// is an in-app action, not a share-sheet capture.
+function initShelfForm() {
+  const formEl = document.getElementById("add-to-shelf-form");
+  if (!formEl) return;
+
+  const pickerEl = document.getElementById("shelf-category-picker");
+  const hiddenInputEl = document.getElementById("shelf_category_id");
+  renderCategoryPicker(pickerEl, hiddenInputEl);
+  wireAddCategory(pickerEl, hiddenInputEl);
+
+  formEl.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const statusEl = document.getElementById("shelf-sync-status");
+    const title = document.getElementById("shelf_title").value.trim();
+    if (!title) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("notes").insert({
+      quote: title,
+      link: document.getElementById("shelf_link").value.trim() || null,
+      source_type: document.getElementById("shelf_source_type").value,
+      category_id: hiddenInputEl.value || null,
+      context: document.getElementById("shelf_context").value.trim() || null,
+      source_used_at: now,
+      status: "to_read",
+      last_touched: now,
+      client_id: crypto.randomUUID(),
+      user_id: user.id,
+    });
+
+    if (error) {
+      if (statusEl) statusEl.textContent = "Couldn't add — check your connection.";
+      return;
+    }
+
+    formEl.reset();
+    renderCategoryPicker(pickerEl, hiddenInputEl);
+    if (statusEl) statusEl.textContent = "Added to shelf.";
+    refreshReadingDashboard();
+  });
 }
 
 function momentumPill(item) {
@@ -450,7 +509,7 @@ supabase
 // ------------------------------------------------------------
 function setAuthedUI(isAuthed) {
   const loginView = document.getElementById("view-login");
-  const captureView = document.getElementById("view-capture");
+  const notesView = document.getElementById("view-notes");
   const tabbar = document.querySelector("nav.tabbar");
   const signoutBtn = document.getElementById("signout-btn");
   if (!loginView) return; // capture.html has no auth gate
@@ -461,12 +520,12 @@ function setAuthedUI(isAuthed) {
 
   if (isAuthed) {
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-    captureView?.classList.add("active");
+    notesView?.classList.add("active");
     document.querySelectorAll("nav.tabbar button").forEach((b) =>
-      b.classList.toggle("active", b.dataset.view === "capture")
+      b.classList.toggle("active", b.dataset.view === "notes")
     );
   } else {
-    captureView?.classList.remove("active");
+    notesView?.classList.remove("active");
     const loginForm = document.getElementById("login-form");
     const codeForm = document.getElementById("login-code-form");
     if (loginForm && codeForm) {
@@ -542,6 +601,9 @@ async function initAuth() {
       const pickerEl = document.getElementById("category-picker");
       const hiddenInputEl = document.getElementById("category_id");
       if (pickerEl && hiddenInputEl) renderCategoryPicker(pickerEl, hiddenInputEl);
+      const shelfPickerEl = document.getElementById("shelf-category-picker");
+      const shelfHiddenInputEl = document.getElementById("shelf_category_id");
+      if (shelfPickerEl && shelfHiddenInputEl) renderCategoryPicker(shelfPickerEl, shelfHiddenInputEl);
       syncPendingNotes();
       refreshNotesList();
       refreshReadingDashboard();
@@ -585,12 +647,14 @@ if (dateEl) {
 }
 
 const mainCaptureForm = document.getElementById("capture-form");
-if (mainCaptureForm && document.getElementById("view-capture")) {
+if (mainCaptureForm && document.getElementById("view-notes")) {
   initCaptureForm({
     formEl: mainCaptureForm,
     onSaved: () => refreshNotesList(),
   });
 }
+
+initShelfForm();
 
 initAuth();
 syncPendingNotes();

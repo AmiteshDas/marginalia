@@ -47,8 +47,8 @@
     </form>
   </section>
 
-  <!-- CAPTURE -->
-  <section class="view" id="view-capture">
+  <!-- NOTES (capture + list) -->
+  <section class="view" id="view-notes">
     <form class="capture" id="capture-form">
       <label for="quote">Quote</label>
       <textarea id="quote" required placeholder="What caught you?"></textarea>
@@ -80,16 +80,43 @@
       <button type="submit" class="primary">Save note</button>
       <div class="sync-status" id="sync-status"></div>
     </form>
-  </section>
 
-  <!-- NOTES -->
-  <section class="view" id="view-notes">
     <button type="button" class="signout-link" id="toggle-archived">Show archived</button>
     <div id="notes-list"></div>
   </section>
 
-  <!-- READING -->
+  <!-- SHELF -->
   <section class="view" id="view-reading">
+    <h2 class="section-heading">Add to Shelf</h2>
+    <form class="capture" id="add-to-shelf-form">
+      <label for="shelf_title">What is it?</label>
+      <input id="shelf_title" type="text" required placeholder="Title or headline" />
+
+      <label for="shelf_link">Link</label>
+      <input id="shelf_link" type="text" inputmode="url" placeholder="https://…" />
+
+      <label for="shelf_source_type">Source</label>
+      <select id="shelf_source_type">
+        <option value="article">Article</option>
+        <option value="book">Book</option>
+        <option value="podcast">Podcast</option>
+        <option value="video">Video</option>
+        <option value="other">Other</option>
+      </select>
+
+      <label>Category</label>
+      <div class="category-picker" id="shelf-category-picker">
+        <button type="button" class="category-chip add-new" id="shelf-add-category">+ new</button>
+      </div>
+      <input type="hidden" id="shelf_category_id" />
+
+      <label for="shelf_context">Why you want to read this</label>
+      <textarea id="shelf_context" placeholder="Optional"></textarea>
+
+      <button type="submit" class="primary">Add to shelf</button>
+      <div class="sync-status" id="shelf-sync-status"></div>
+    </form>
+
     <div class="cold-callout" id="cold-callout" hidden></div>
 
     <h2 class="section-heading">Currently Reading</h2>
@@ -118,9 +145,8 @@
 </main>
 
 <nav class="tabbar" hidden>
-  <button data-view="capture" class="active">Capture</button>
-  <button data-view="notes">Notes</button>
-  <button data-view="reading">Reading</button>
+  <button data-view="notes" class="active">Notes</button>
+  <button data-view="reading">Shelf</button>
   <button data-view="digest">This Week</button>
 </nav>
 
