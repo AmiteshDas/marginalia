@@ -22,6 +22,13 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    trigger to allow those columns (plus the existing `archived_at`) to
    change. Existing notes are backfilled as `done` so they aren't swept
    into the to_read archiving lifecycle.
+7. Also run `supabase-migration-004-notes-shelf-kind.sql` — it adds a
+   `kind` column (`note` vs `shelf`) so a Shelf placeholder never shows up
+   in the Notes list, and `source_item_id`, an optional self-reference
+   letting a note point back at the shelf item it came from. Also adds
+   `notes_view`/`shelf_view` — read-only views over the same table, scoped
+   to each kind's relevant columns, for a cleaner picture when browsing in
+   the SQL editor (the app itself queries `notes` directly).
 
 ## 2. Weekly digest function
 

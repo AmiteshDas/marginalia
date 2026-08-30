@@ -54,7 +54,8 @@
 
   <!-- NOTES (capture + list) -->
   <section class="view" id="view-notes">
-    <form class="capture" id="capture-form">
+    <button type="button" class="link-action" id="toggle-capture-form">+ New note</button>
+    <form class="capture" id="capture-form" hidden>
       <label for="quote">Quote</label>
       <textarea id="quote" required placeholder="What caught you?"></textarea>
 
@@ -82,6 +83,11 @@
       <label for="used_at">When</label>
       <input id="used_at" type="datetime-local" />
 
+      <label for="source_item_id">From your shelf (optional)</label>
+      <select id="source_item_id">
+        <option value="">— none —</option>
+      </select>
+
       <button type="submit" class="primary">Save note</button>
       <div class="sync-status" id="sync-status"></div>
     </form>
@@ -92,8 +98,25 @@
 
   <!-- SHELF -->
   <section class="view" id="view-reading">
-    <h2 class="section-heading">Add to Shelf</h2>
-    <form class="capture" id="add-to-shelf-form">
+    <div class="cold-callout" id="cold-callout" hidden></div>
+
+    <h2 class="section-heading">Currently Reading</h2>
+    <div id="reading-list"></div>
+
+    <div class="reading-columns">
+      <div class="reading-col">
+        <h2 class="section-heading">To Read</h2>
+        <div id="to-read-list"></div>
+        <button type="button" class="link-action" id="to-read-more" hidden></button>
+      </div>
+      <div class="reading-col">
+        <h2 class="section-heading">You're Reading About</h2>
+        <div id="topic-rollup"></div>
+      </div>
+    </div>
+
+    <button type="button" class="link-action" id="toggle-shelf-form">Want to add something else to the shelf?</button>
+    <form class="capture" id="add-to-shelf-form" hidden>
       <label for="shelf_title">What is it?</label>
       <input id="shelf_title" type="text" required placeholder="Title or headline" />
 
@@ -121,23 +144,6 @@
       <button type="submit" class="primary">Add to shelf</button>
       <div class="sync-status" id="shelf-sync-status"></div>
     </form>
-
-    <div class="cold-callout" id="cold-callout" hidden></div>
-
-    <h2 class="section-heading">Currently Reading</h2>
-    <div id="reading-list"></div>
-
-    <div class="reading-columns">
-      <div class="reading-col">
-        <h2 class="section-heading">To Read</h2>
-        <div id="to-read-list"></div>
-        <button type="button" class="link-action" id="to-read-more" hidden></button>
-      </div>
-      <div class="reading-col">
-        <h2 class="section-heading">You're Reading About</h2>
-        <div id="topic-rollup"></div>
-      </div>
-    </div>
   </section>
 
   <!-- DIGEST -->
