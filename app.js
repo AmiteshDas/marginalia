@@ -762,6 +762,7 @@ if (dateEl) {
 // the app; browsing what you've already written is the secondary case.
 wireCollapsibleForm("toggle-notes-list", "notes-list-wrap", "Hide notes");
 const shelfFormToggle = wireCollapsibleForm("toggle-shelf-form", "add-to-shelf-form", "Hide form");
+wireCollapsibleForm("about-btn", "about-panel", "Hide");
 
 const mainCaptureForm = document.getElementById("capture-form");
 if (mainCaptureForm && document.getElementById("view-notes")) {
