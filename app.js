@@ -457,6 +457,7 @@ function readingCard(item) {
         <span>${item.categories?.name ?? "Uncategorised"}</span>
         ${momentumPill(item)}
         <span>${days}d ago</span>
+        ${item.link ? `<a href="${item.link}" target="_blank">link →</a>` : ""}
       </div>
       <div class="reading-card-actions">
         <button type="button" class="link-action" data-action="progress" data-id="${item.id}">Mark progress</button>
@@ -474,6 +475,7 @@ function toReadRow(item, now = new Date()) {
         <span>${item.source_type}</span>
         <span>${item.categories?.name ?? "Uncategorised"}</span>
         <span>${daysSince(item.source_used_at, now)}d in queue</span>
+        ${item.link ? `<a href="${item.link}" target="_blank">link →</a>` : ""}
         ${stillWantThis ? `<span class="resurface-flag">Still want to read this?</span>` : ""}
         <button type="button" class="link-action" data-action="start" data-id="${item.id}">Start reading</button>
       </div>
