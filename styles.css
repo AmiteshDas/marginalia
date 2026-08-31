@@ -340,6 +340,53 @@ button.primary:active { opacity: 0.85; }
   gap: 14px;
 }
 
+.progress-control { margin-top: 10px; }
+.progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+.page-inputs {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.page-input {
+  width: 64px;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.milestone-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.milestone-chip {
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.milestone-chip.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--card);
+}
+
 .link-action {
   border: none;
   background: none;

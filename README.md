@@ -31,6 +31,13 @@ A note-taking PWA for quotes and links you want to remember, with a Saturday
    the SQL editor (the app itself queries `notes` directly).
 8. Also run `supabase-migration-005-paper-source-type.sql` — adds `paper`
    ("Long-form Paper") to the `source_type` enum.
+9. Also run `supabase-migration-006-shelf-progress.sql` — adds
+   `current_page`/`total_pages` (book/paper) and `milestone` (everything
+   else) so Currently Reading cards can show real progress instead of
+   just recency. Also tightens the append-only trigger to properly guard
+   `kind`/`source_item_id` (previously omitted by mistake — see
+   `lib/momentum.js`'s `computeProgressPercent` for how both feed one
+   unified progress bar).
 
 ## 2. Weekly digest function
 
