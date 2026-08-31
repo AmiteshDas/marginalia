@@ -146,6 +146,11 @@
       <label for="shelf_context">Why you want to read this</label>
       <textarea id="shelf_context" placeholder="Optional"></textarea>
 
+      <div id="shelf-pages-field" hidden>
+        <label for="shelf_total_pages">Total pages (optional — if you already know it)</label>
+        <input id="shelf_total_pages" type="number" inputmode="numeric" min="1" placeholder="e.g. 320" />
+      </div>
+
       <button type="submit" class="primary">Add to shelf</button>
       <div class="sync-status" id="shelf-sync-status"></div>
     </form>

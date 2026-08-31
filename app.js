@@ -1,6 +1,13 @@
 import { supabase } from "./supabase-client.js";
 import { queueNote, getPendingNotes, markSynced, markFailed } from "./idb-queue.js";
-import { computeMomentum, daysSince, isColdReadingItem } from "./lib/momentum.js";
+import {
+  computeMomentum,
+  daysSince,
+  isColdReadingItem,
+  usesPageTracking,
+  computeProgressPercent,
+  MILESTONES,
+} from "./lib/momentum.js";
 
 // ------------------------------------------------------------
 // Service worker registration — self-updating.
@@ -377,8 +384,19 @@ async function startReading(id) {
   refreshReadingDashboard();
 }
 
-async function markProgress(id) {
-  await supabase.from("notes").update({ last_touched: new Date().toISOString() }).eq("id", id);
+async function updatePages(id, currentPage, totalPages) {
+  await supabase
+    .from("notes")
+    .update({ current_page: currentPage, total_pages: totalPages, last_touched: new Date().toISOString() })
+    .eq("id", id);
+  refreshReadingDashboard();
+}
+
+async function setMilestone(id, milestone) {
+  await supabase
+    .from("notes")
+    .update({ milestone, last_touched: new Date().toISOString() })
+    .eq("id", id);
   refreshReadingDashboard();
 }
 
@@ -403,6 +421,14 @@ function initShelfForm() {
   renderCategoryPicker(pickerEl, hiddenInputEl);
   wireAddCategory(pickerEl, hiddenInputEl);
 
+  const sourceTypeEl = document.getElementById("shelf_source_type");
+  const pagesFieldEl = document.getElementById("shelf-pages-field");
+  const togglePagesField = () => {
+    if (pagesFieldEl) pagesFieldEl.hidden = !usesPageTracking(sourceTypeEl.value);
+  };
+  sourceTypeEl?.addEventListener("change", togglePagesField);
+  togglePagesField();
+
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
     const statusEl = document.getElementById("shelf-sync-status");
@@ -412,17 +438,24 @@ function initShelfForm() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const sourceType = sourceTypeEl.value;
+    const totalPagesEl = document.getElementById("shelf_total_pages");
+    const totalPages = usesPageTracking(sourceType) && totalPagesEl?.value
+      ? parseInt(totalPagesEl.value, 10)
+      : null;
+
     const now = new Date().toISOString();
     const { error } = await supabase.from("notes").insert({
       quote: title,
       link: document.getElementById("shelf_link").value.trim() || null,
-      source_type: document.getElementById("shelf_source_type").value,
+      source_type: sourceType,
       category_id: hiddenInputEl.value || null,
       context: document.getElementById("shelf_context").value.trim() || null,
       source_used_at: now,
       kind: "shelf",
       status: "to_read",
       last_touched: now,
+      total_pages: totalPages,
       client_id: crypto.randomUUID(),
       user_id: user.id,
     });
@@ -433,6 +466,7 @@ function initShelfForm() {
     }
 
     formEl.reset();
+    togglePagesField();
     renderCategoryPicker(pickerEl, hiddenInputEl);
     if (statusEl) statusEl.textContent = "Added to shelf.";
     await loadShelfItems();
@@ -447,6 +481,49 @@ function momentumPill(item) {
   return `<span class="momentum-pill momentum-${momentum}">${momentum}</span>`;
 }
 
+const MILESTONE_LABELS = {
+  started: "Just started",
+  partway: "Partway",
+  nearly_there: "Nearly there",
+  finished: "Finished",
+};
+
+function progressBar(item) {
+  const percent = computeProgressPercent(item);
+  return `<div class="progress-bar"><div class="progress-bar-fill" style="width: ${percent ?? 0}%"></div></div>`;
+}
+
+function progressControl(item) {
+  if (usesPageTracking(item.source_type)) {
+    return `
+      <div class="progress-control">
+        ${progressBar(item)}
+        <div class="page-inputs">
+          <input type="number" class="page-input" inputmode="numeric" min="0"
+                 data-field="current" data-id="${item.id}"
+                 value="${item.current_page ?? ""}" placeholder="page" />
+          <span>of</span>
+          <input type="number" class="page-input" inputmode="numeric" min="1"
+                 data-field="total" data-id="${item.id}"
+                 value="${item.total_pages ?? ""}" placeholder="total" />
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="progress-control">
+      ${progressBar(item)}
+      <div class="milestone-chips">
+        ${Object.keys(MILESTONES)
+          .map(
+            (m) => `
+          <button type="button" class="milestone-chip${item.milestone === m ? " selected" : ""}"
+                  data-milestone="${m}" data-id="${item.id}">${MILESTONE_LABELS[m]}</button>`
+          )
+          .join("")}
+      </div>
+    </div>`;
+}
+
 function readingCard(item) {
   const days = daysSince(item.last_touched);
   return `
@@ -459,8 +536,8 @@ function readingCard(item) {
         <span>${days}d ago</span>
         ${item.link ? `<a href="${item.link}" target="_blank">link →</a>` : ""}
       </div>
+      ${progressControl(item)}
       <div class="reading-card-actions">
-        <button type="button" class="link-action" data-action="progress" data-id="${item.id}">Mark progress</button>
         <button type="button" class="link-action" data-action="done" data-id="${item.id}">Mark done</button>
       </div>
     </div>`;
@@ -550,8 +627,22 @@ async function refreshReadingDashboard() {
     btn.addEventListener("click", () => {
       const { action, id } = btn.dataset;
       if (action === "start") startReading(id);
-      if (action === "progress") markProgress(id);
       if (action === "done") markDone(id);
+    });
+  });
+
+  view.querySelectorAll(".milestone-chip").forEach((btn) => {
+    btn.addEventListener("click", () => setMilestone(btn.dataset.id, btn.dataset.milestone));
+  });
+
+  view.querySelectorAll(".page-input").forEach((input) => {
+    input.addEventListener("change", () => {
+      const { id } = input.dataset;
+      const currentEl = view.querySelector(`.page-input[data-field="current"][data-id="${id}"]`);
+      const totalEl = view.querySelector(`.page-input[data-field="total"][data-id="${id}"]`);
+      const current = currentEl?.value ? parseInt(currentEl.value, 10) : null;
+      const total = totalEl?.value ? parseInt(totalEl.value, 10) : null;
+      updatePages(id, current, total);
     });
   });
 }
